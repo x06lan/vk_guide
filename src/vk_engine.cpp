@@ -11,14 +11,16 @@
 #include <chrono>
 #include <thread>
 
-namespace {
-VulkanEngine *loadedEngine = nullptr;
-auto constexpr bUseValidationLayers = true;
+namespace
+{
+  VulkanEngine *loadedEngine = nullptr;
+  auto constexpr bUseValidationLayers = true;
 }; // namespace
 
 VulkanEngine &VulkanEngine::Get() { return *loadedEngine; }
 
-void VulkanEngine::init() {
+void VulkanEngine::init()
+{
   // only one engine initialization is allowed with the application.
   assert(loadedEngine == nullptr);
   loadedEngine = this;
@@ -31,7 +33,8 @@ void VulkanEngine::init() {
   _window = SDL_CreateWindow("Vulkan Engine", SDL_WINDOWPOS_UNDEFINED,
                              SDL_WINDOWPOS_UNDEFINED, _windowExtent.width,
                              _windowExtent.height, window_flags);
-  if (!_window) {
+  if (!_window)
+  {
     fmt::println(stderr, "Can't Create window, SDLError: {}", SDL_GetError());
     std::abort();
   }
@@ -45,7 +48,8 @@ void VulkanEngine::init() {
   _isInitialized = true;
 }
 
-void VulkanEngine::init_vulkan() {
+void VulkanEngine::init_vulkan()
+{
   vkb::InstanceBuilder builder;
   auto const inst_ret = builder.set_app_name("Example Vulkan Application")
                             .request_validation_layers(bUseValidationLayers)
@@ -57,7 +61,8 @@ void VulkanEngine::init_vulkan() {
   _instance = inst_ret->instance;
   _debug_messager = inst_ret->debug_messenger;
 
-  if (SDL_Vulkan_CreateSurface(_window, _instance, &_surface) != SDL_TRUE) {
+  if (SDL_Vulkan_CreateSurface(_window, _instance, &_surface) != SDL_TRUE)
+  {
     fmt::println(stderr, "Can't create Vulkan Surface, error: {}",
                  SDL_GetError());
     std::abort();
@@ -107,7 +112,8 @@ void VulkanEngine::init_vulkan() {
   _graphicsQueueFamily = *graphicsQueueFamilyResult;
 }
 
-void VulkanEngine::create_swapchain(uint32_t width, uint32_t height) {
+void VulkanEngine::create_swapchain(uint32_t width, uint32_t height)
+{
   vkb::SwapchainBuilder swapchainBuilder{_chosenGPU, _device, _surface};
   _swapchainImageFormat = VK_FORMAT_B8G8R8A8_UNORM;
   vkb::Result<vkb::Swapchain> vkbSwapchain =
@@ -135,23 +141,28 @@ void VulkanEngine::create_swapchain(uint32_t width, uint32_t height) {
   _swapchainImageViews = *image_views;
 }
 
-void VulkanEngine::init_swapchain() {
+void VulkanEngine::init_swapchain()
+{
   create_swapchain(_windowExtent.width, _windowExtent.height);
 }
 
-void VulkanEngine::destory_swapchain() {
+void VulkanEngine::destory_swapchain()
+{
   vkDestroySwapchainKHR(_device, _swapchain, nullptr);
 
-  for (auto &imgView : _swapchainImageViews) {
+  for (auto &imgView : _swapchainImageViews)
+  {
     vkDestroyImageView(_device, imgView, nullptr);
   }
 }
 
-void VulkanEngine::init_commands() {
+void VulkanEngine::init_commands()
+{
   VkCommandPoolCreateInfo commandPoolInfo = vkinit::command_pool_create_info(
       _graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
 
-  for (int i = 1; i < FRAME_OVERLAP; i++) {
+  for (int i = 1; i < FRAME_OVERLAP; i++)
+  {
     VK_CHECK(vkCreateCommandPool(_device, &commandPoolInfo, nullptr,
                                  &_frames[i]._commandPool));
 
@@ -163,11 +174,13 @@ void VulkanEngine::init_commands() {
   }
 }
 
-void VulkanEngine::init_sync_structures() {
+void VulkanEngine::init_sync_structures()
+{
   VkFenceCreateInfo fenceInfo =
       vkinit::fence_create_info(VK_FENCE_CREATE_SIGNALED_BIT);
   VkSemaphoreCreateInfo semaphoreInfo = vkinit::semaphore_create_info();
-  for (int i = 0; i < FRAME_OVERLAP; i++) {
+  for (int i = 0; i < FRAME_OVERLAP; i++)
+  {
     VK_CHECK(
         vkCreateFence(_device, &fenceInfo, nullptr, &_frames[i]._renderFence));
     VK_CHECK(vkCreateSemaphore(_device, &semaphoreInfo, nullptr,
@@ -177,10 +190,13 @@ void VulkanEngine::init_sync_structures() {
   }
 }
 
-void VulkanEngine::cleanup() {
-  if (_isInitialized) {
+void VulkanEngine::cleanup()
+{
+  if (_isInitialized)
+  {
     vkDeviceWaitIdle(_device);
-    for (auto &f : _frames) {
+    for (auto &f : _frames)
+    {
       vkDestroyCommandPool(_device, f._commandPool, nullptr);
     }
     destory_swapchain();
@@ -196,7 +212,8 @@ void VulkanEngine::cleanup() {
   loadedEngine = nullptr;
 }
 
-void VulkanEngine::draw() {
+void VulkanEngine::draw()
+{
   VK_CHECK(vkWaitForFences(_device, 1, &get_current_frame()._renderFence, true,
                            SecondsInNano(1)));
   VK_CHECK(vkResetFences(_device, 1, &get_current_frame()._renderFence));
@@ -207,32 +224,64 @@ void VulkanEngine::draw() {
                                  VK_NULL_HANDLE, &swapchainImageIndex));
   VkCommandBuffer cmd = get_current_frame()._mainCommandBuffer;
   VK_CHECK(vkResetCommandBuffer(cmd, 0));
+
+  // begin the command buffer recording. We will use this command buffer exactly once, so we want to let vulkan know that
+  VkCommandBufferBeginInfo cmdBeginInfo = vkinit::command_buffer_begin_info(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+
+  // start the command buffer recording
+  VK_CHECK(vkBeginCommandBuffer(cmd, &cmdBeginInfo));
+
+  // make the swapchain image into writeable mode before rendering
+  vkutil::transition_image(cmd, _swapchainImage[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+
+  // make a clear-color from frame number. This will flash with a 120 frame period.
+  VkClearColorValue clearValue;
+  float flash = std::abs(std::sin(_frameNumber / 120.f));
+  clearValue = {{0.0f, 0.0f, flash, 1.0f}};
+
+  VkImageSubresourceRange clearRange = vkinit::image_subresource_range(VK_IMAGE_ASPECT_COLOR_BIT);
+
+  // clear image
+  vkCmdClearColorImage(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_GENERAL, &clearValue, 1, &clearRange);
+
+  // make the swapchain image into presentable mode
+  vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+
+  // finalize the command buffer (we can no longer add commands, but it can now be executed)
+  VK_CHECK(vkEndCommandBuffer(cmd));
 }
 
-void VulkanEngine::run() {
+void VulkanEngine::run()
+{
   SDL_Event e;
   bool bQuit = false;
 
   // main loop
-  while (!bQuit) {
+  while (!bQuit)
+  {
     // Handle events on queue
-    while (SDL_PollEvent(&e) != 0) {
+    while (SDL_PollEvent(&e) != 0)
+    {
       // close the window when user alt-f4s or clicks the X button
       if (e.type == SDL_QUIT)
         bQuit = true;
 
-      if (e.type == SDL_WINDOWEVENT) {
-        if (e.window.event == SDL_WINDOWEVENT_MINIMIZED) {
+      if (e.type == SDL_WINDOWEVENT)
+      {
+        if (e.window.event == SDL_WINDOWEVENT_MINIMIZED)
+        {
           stop_rendering = true;
         }
-        if (e.window.event == SDL_WINDOWEVENT_RESTORED) {
+        if (e.window.event == SDL_WINDOWEVENT_RESTORED)
+        {
           stop_rendering = false;
         }
       }
     }
 
     // do not draw if we are minimized
-    if (stop_rendering) {
+    if (stop_rendering)
+    {
       // throttle the speed to avoid the endless spinning
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
       continue;
