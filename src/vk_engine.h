@@ -5,17 +5,19 @@
 
 #include <vk_types.h>
 
-struct FrameData {
+struct FrameData
+{
   VkCommandPool _commandPool;
   VkCommandBuffer _mainCommandBuffer;
-  VkSemaphore  _swapchainSemaphore, _renderSemaphore;
+  VkSemaphore _swapchainSemaphore, _renderSemaphore;
   VkFence _renderFence;
 };
 
-unsigned int constexpr FRAME_OVERLAP = 2;
+unsigned int constexpr FRAME_OVERLAP = 4;
 #define SecondsInNano(x) (x * 1000000000LL)
 
-class VulkanEngine {
+class VulkanEngine
+{
 public:
   FrameData _frames[FRAME_OVERLAP];
   FrameData &get_current_frame() { return _frames[_frameNumber % FRAME_OVERLAP]; }

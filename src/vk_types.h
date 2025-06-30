@@ -20,20 +20,27 @@
 #include <glm/mat4x4.hpp>
 #include <glm/vec4.hpp>
 
-#define VK_CHECK(x)                                                            \
-  do {                                                                         \
-    VkResult err = x;                                                          \
-    if (err) {                                                                 \
-      fmt::println("Detected Vulkan error: {}", string_VkResult(err));         \
-      abort();                                                                 \
-    }                                                                          \
+#define VK_CHECK(x)                                                    \
+  do                                                                   \
+  {                                                                    \
+    VkResult err = x;                                                  \
+    if (err == VK_SUBOPTIMAL_KHR)                                      \
+    {                                                                  \
+      fmt::println("Vulkan warning: {}", string_VkResult(err));        \
+    }                                                                  \
+    if (err && err != VK_SUBOPTIMAL_KHR)                               \
+    {                                                                  \
+      fmt::println("Detected Vulkan error: {}", string_VkResult(err)); \
+      abort();                                                         \
+    }                                                                  \
   } while (0)
 
-#define RESULT_CHECK(r, errfmt)                                               \
-  do {                                                                         \
-    if (!r) {                                                                  \
-      fmt::println(stderr, errfmt, r.error().message());                      \
-      std::abort();                                                            \
-    }                                                                          \
+#define RESULT_CHECK(r, errfmt)                          \
+  do                                                     \
+  {                                                      \
+    if (!r)                                              \
+    {                                                    \
+      fmt::println(stderr, errfmt, r.error().message()); \
+      std::abort();                                      \
+    }                                                    \
   } while (0)
-

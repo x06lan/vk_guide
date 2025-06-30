@@ -131,6 +131,8 @@ void VulkanEngine::create_swapchain(uint32_t width, uint32_t height)
   RESULT_CHECK(vkbSwapchain, "Failed to create swapchain, errormessage: {}");
   _swapchainExtent = vkbSwapchain->extent;
   _swapchain = vkbSwapchain->swapchain;
+  fmt::println("Swapchain created with extent: {}x{}",
+               _swapchainExtent.width, _swapchainExtent.height);
 
   auto images = vkbSwapchain->get_images();
   RESULT_CHECK(images, "Failed to get image, errormessage: {}");
@@ -197,9 +199,16 @@ void VulkanEngine::cleanup()
   if (_isInitialized)
   {
     vkDeviceWaitIdle(_device);
-    for (auto &f : _frames)
+    for (int i = 0; i < FRAME_OVERLAP; i++)
     {
-      vkDestroyCommandPool(_device, f._commandPool, nullptr);
+
+      // already written from before
+      vkDestroyCommandPool(_device, _frames[i]._commandPool, nullptr);
+
+      // destroy sync objects
+      vkDestroyFence(_device, _frames[i]._renderFence, nullptr);
+      vkDestroySemaphore(_device, _frames[i]._renderSemaphore, nullptr);
+      vkDestroySemaphore(_device, _frames[i]._swapchainSemaphore, nullptr);
     }
     destory_swapchain();
     vkDestroySurfaceKHR(_instance, _surface, nullptr);
@@ -209,20 +218,7 @@ void VulkanEngine::cleanup()
     vkDestroyInstance(_instance, nullptr);
     SDL_DestroyWindow(_window);
   }
-
-  // clear engine pointer
   loadedEngine = nullptr;
-  for (int i = 0; i < FRAME_OVERLAP; i++)
-  {
-
-    // already written from before
-    vkDestroyCommandPool(_device, _frames[i]._commandPool, nullptr);
-
-    // destroy sync objects
-    vkDestroyFence(_device, _frames[i]._renderFence, nullptr);
-    vkDestroySemaphore(_device, _frames[i]._renderSemaphore, nullptr);
-    vkDestroySemaphore(_device, _frames[i]._swapchainSemaphore, nullptr);
-  }
 }
 
 void VulkanEngine::draw()
