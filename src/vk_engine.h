@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <vector>
 #include <vk_types.h>
 
 struct FrameData
@@ -13,14 +14,14 @@ struct FrameData
   VkFence _renderFence;
 };
 
-unsigned int constexpr FRAME_OVERLAP = 4;
 #define SecondsInNano(x) (x * 1000000000LL)
 
 class VulkanEngine
 {
 public:
-  FrameData _frames[FRAME_OVERLAP];
-  FrameData &get_current_frame() { return _frames[_frameNumber % FRAME_OVERLAP]; }
+  std::vector<FrameData> _frames;
+  inline FrameData &get_current_frame() { return _frames[_frameNumber % _frames.size()]; }
+  inline int get_frame_overlay() { return _frames.size(); }
   VkQueue _graphicsQueue;
   uint32_t _graphicsQueueFamily;
 

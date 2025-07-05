@@ -13,10 +13,19 @@
 #include <thread>
 #include <vulkan/vulkan_core.h>
 
+// static variables and constants
 namespace
 {
   VulkanEngine *loadedEngine = nullptr;
   auto constexpr bUseValidationLayers = true;
+
+  inline uint32_t get_surface_min_image_count(VkPhysicalDevice _chosenGPU, VkSurfaceKHR _surface)
+  {
+    VkSurfaceCapabilitiesKHR surfaceCapabilities;
+    VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(_chosenGPU, _surface, &surfaceCapabilities));
+    return surfaceCapabilities.minImageCount;
+  }
+
 }; // namespace
 
 VulkanEngine &VulkanEngine::Get() { return *loadedEngine; }
@@ -118,17 +127,25 @@ void VulkanEngine::create_swapchain(uint32_t width, uint32_t height)
 {
   vkb::SwapchainBuilder swapchainBuilder{_chosenGPU, _device, _surface};
   _swapchainImageFormat = VK_FORMAT_B8G8R8A8_UNORM;
+
+  // Get the frame overlap from the physical device and surface capabilities
+  uint32_t frameOverlap = get_surface_min_image_count(_chosenGPU, _surface) + 1;
+  fmt::println("Frame overlap: {}", frameOverlap);
+  _frames.resize(static_cast<size_t>(frameOverlap));
+
   vkb::Result<vkb::Swapchain> vkbSwapchain =
       swapchainBuilder
           .set_desired_format(VkSurfaceFormatKHR{
               .format = _swapchainImageFormat,
               .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR})
+          .set_desired_min_image_count(frameOverlap)
           .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
           .set_desired_extent(width, height)
           .add_image_usage_flags(VK_IMAGE_USAGE_TRANSFER_DST_BIT)
           .build();
 
   RESULT_CHECK(vkbSwapchain, "Failed to create swapchain, errormessage: {}");
+
   _swapchainExtent = vkbSwapchain->extent;
   _swapchain = vkbSwapchain->swapchain;
   fmt::println("Swapchain created with extent: {}x{}",
@@ -139,7 +156,6 @@ void VulkanEngine::create_swapchain(uint32_t width, uint32_t height)
   _swapchainImage = *images;
 
   auto image_views = vkbSwapchain->get_image_views();
-
   RESULT_CHECK(image_views, "Failed to get image view, errormessage: {}");
 
   _swapchainImageViews = *image_views;
@@ -165,7 +181,7 @@ void VulkanEngine::init_commands()
   VkCommandPoolCreateInfo commandPoolInfo = vkinit::command_pool_create_info(
       _graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
 
-  for (int i = 0; i < FRAME_OVERLAP; i++) // Start from i = 0
+  for (size_t i = 0; i < get_frame_overlay(); i++) // Start from i = 0
   {
     VK_CHECK(vkCreateCommandPool(_device, &commandPoolInfo, nullptr,
                                  &_frames[i]._commandPool));
@@ -183,7 +199,7 @@ void VulkanEngine::init_sync_structures()
   VkFenceCreateInfo fenceInfo =
       vkinit::fence_create_info(VK_FENCE_CREATE_SIGNALED_BIT);
   VkSemaphoreCreateInfo semaphoreInfo = vkinit::semaphore_create_info();
-  for (int i = 0; i < FRAME_OVERLAP; i++)
+  for (int i = 0; i < get_frame_overlay(); i++)
   {
     VK_CHECK(
         vkCreateFence(_device, &fenceInfo, nullptr, &_frames[i]._renderFence));
@@ -199,7 +215,7 @@ void VulkanEngine::cleanup()
   if (_isInitialized)
   {
     vkDeviceWaitIdle(_device);
-    for (int i = 0; i < FRAME_OVERLAP; i++)
+    for (int i = 0; i < get_frame_overlay(); i++)
     {
 
       // already written from before
