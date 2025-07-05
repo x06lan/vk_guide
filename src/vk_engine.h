@@ -6,12 +6,33 @@
 #include <vector>
 #include <vk_types.h>
 
+struct DeletionQueue
+{
+  std::deque<std::function<void()>> queue;
+  void push_function(std::function<void()> func) { queue.push_back(func); }
+  void flush()
+  {
+    for(auto it = queue.rbegin(); it != queue.rend(); ++it)
+    {
+      (*it)();
+    }
+  }
+};
+struct AllocatedImage {
+    VkImage image;
+    VkImageView imageView;
+    VmaAllocation allocation;
+    VkExtent3D imageExtent;
+    VkFormat imageFormat;
+};
+
 struct FrameData
 {
   VkCommandPool _commandPool;
   VkCommandBuffer _mainCommandBuffer;
   VkSemaphore _swapchainSemaphore, _renderSemaphore;
   VkFence _renderFence;
+  DeletionQueue _deletionQueue;
 };
 
 #define SecondsInNano(x) (x * 1000000000LL)
@@ -19,9 +40,11 @@ struct FrameData
 class VulkanEngine
 {
 public:
+
   std::vector<FrameData> _frames;
   inline FrameData &get_current_frame() { return _frames[_frameNumber % _frames.size()]; }
   inline int get_frame_overlay() { return _frames.size(); }
+  DeletionQueue _mainDeletionQueue;
   VkQueue _graphicsQueue;
   uint32_t _graphicsQueueFamily;
 
@@ -41,6 +64,11 @@ public:
   std::vector<VkImageView> _swapchainImageViews;
   VkExtent2D _swapchainExtent;
 
+  VmaAllocator _allocator;
+  AllocatedImage _drawImage;
+  VkExtent2D _drawExtent;
+
+
   struct SDL_Window *_window{nullptr};
 
   static VulkanEngine &Get();
@@ -53,6 +81,7 @@ public:
 
   // draw loop
   void draw();
+  void draw_background(VkCommandBuffer cmd);
 
   // run main loop
   void run();
