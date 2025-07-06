@@ -5,6 +5,8 @@
 
 #include <vector>
 #include <vk_types.h>
+#include <vk_descriptors.h>
+
 
 struct DeletionQueue
 {
@@ -68,6 +70,13 @@ public:
   AllocatedImage _drawImage;
   VkExtent2D _drawExtent;
 
+  DescriptorAllocator globalDescriptorAllocator;
+  VkDescriptorSet _drawImageDescriptors;
+  VkDescriptorSetLayout _drawImageDescriptorLayout;
+
+  VkPipeline _gradientPipeline;
+  VkPipelineLayout _gradientPipelineLayout;
+
 
   struct SDL_Window *_window{nullptr};
 
@@ -93,4 +102,8 @@ private:
   void init_sync_structures();
   void create_swapchain(uint32_t wigth, uint32_t height);
   void destory_swapchain();
+  void init_descriptors();
+  void init_pipelines();
+  void init_background_pipelines();
+
 };
