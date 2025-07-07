@@ -400,8 +400,8 @@ void VulkanEngine::init_imgui() {
   init_info.Device = _device;
   init_info.Queue = _graphicsQueue;
   init_info.DescriptorPool = imguiPool;
-  init_info.MinImageCount = 3;
-  init_info.ImageCount = 3;
+  init_info.MinImageCount = get_frame_overlay();
+  init_info.ImageCount = get_frame_overlay();
   init_info.UseDynamicRendering = true;
 
   // dynamic rendering parameters for imgui to use
