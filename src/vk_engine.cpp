@@ -23,17 +23,39 @@
 
 // static variables and constants
 namespace {
-VulkanEngine *loadedEngine = nullptr;
-auto constexpr bUseValidationLayers = true;
+    VulkanEngine *loadedEngine = nullptr;
+    auto constexpr bUseValidationLayers = true;
 
-inline uint32_t get_surface_min_image_count(VkPhysicalDevice _chosenGPU,
-                                            VkSurfaceKHR _surface) {
-  VkSurfaceCapabilitiesKHR surfaceCapabilities;
-  VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(_chosenGPU, _surface,
-                                                     &surfaceCapabilities));
-  return surfaceCapabilities.minImageCount;
-}
+    inline uint32_t get_surface_min_image_count(VkPhysicalDevice _chosenGPU,
+                                                VkSurfaceKHR _surface) {
+      VkSurfaceCapabilitiesKHR surfaceCapabilities;
+      VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(_chosenGPU, _surface,
+                                                         &surfaceCapabilities));
+      return surfaceCapabilities.minImageCount;
+    }
 
+    VkComputePipelineCreateInfo computePipelinesInfo( VkDevice device,VkPipelineLayout gradientPipelineLayout,const char* shaderPath){
+
+      VkShaderModule shader;
+      if (!vkutil::load_shader_module(shaderPath, device, &shader)) {
+          fmt::print("Error when building the compute shader \n");
+      }
+      VkPipelineShaderStageCreateInfo stageinfo{};
+      stageinfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+      stageinfo.pNext = nullptr;
+      stageinfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+      stageinfo.module = shader;
+      stageinfo.pName = "main";
+
+      VkComputePipelineCreateInfo computePipelineCreateInfo{};
+      computePipelineCreateInfo.sType =
+          VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+      computePipelineCreateInfo.pNext = nullptr;
+      computePipelineCreateInfo.layout = gradientPipelineLayout;
+      computePipelineCreateInfo.stage = stageinfo;
+
+      return computePipelineCreateInfo;
+    };
 }; // namespace
 
 VulkanEngine &VulkanEngine::Get() { return *loadedEngine; }
@@ -104,9 +126,11 @@ void VulkanEngine::init_vulkan() {
           .set_required_features_13(features_13)
           .set_required_features_12(features_12)
           .select();
+  
 
   RESULT_CHECK(physicalDevice,
                "Can't select suitable PhysicalDevice, errormessage: {}");
+  fmt::println("MaxPushConstantsSize: {}",physicalDevice->properties.limits.maxPushConstantsSize );
 
   vkb::DeviceBuilder deviceBuilder{*physicalDevice};
   vkb::Result<vkb::Device> vkbDevice = deviceBuilder.build();
@@ -139,7 +163,9 @@ void VulkanEngine::init_vulkan() {
   _mainDeletionQueue.push_function([&]() { vmaDestroyAllocator(_allocator); });
 }
 
-void VulkanEngine::init_pipelines() { init_background_pipelines(); }
+void VulkanEngine::init_pipelines() { 
+    init_background_pipelines(); 
+}
 
 void VulkanEngine::init_background_pipelines() {
   VkPipelineLayoutCreateInfo computeLayout{};
@@ -148,38 +174,53 @@ void VulkanEngine::init_background_pipelines() {
   computeLayout.pSetLayouts = &_drawImageDescriptorLayout;
   computeLayout.setLayoutCount = 1;
 
+  VkPushConstantRange pushConstant{};
+  pushConstant.offset = 0;
+  pushConstant.size = sizeof(ComputePushConstants) ;
+  pushConstant.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+  computeLayout.pPushConstantRanges = &pushConstant;
+  computeLayout.pushConstantRangeCount = 1;
+
   VK_CHECK(vkCreatePipelineLayout(_device, &computeLayout, nullptr,
                                   &_gradientPipelineLayout));
 
-  VkShaderModule computeDrawShader;
-  if (!vkutil::load_shader_module("./shaders/gradient.spv", _device,
-                                  &computeDrawShader)) {
-    fmt::print("Error when building the compute shader \n");
-  }
+  auto gradientPipelineInfo= computePipelinesInfo(_device,_gradientPipelineLayout,"./shaders/gradient_color.spv");
+  auto skyPipelineInfo = computePipelinesInfo(_device,_gradientPipelineLayout,"./shaders/sky.spv");
 
-  VkPipelineShaderStageCreateInfo stageinfo{};
-  stageinfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-  stageinfo.pNext = nullptr;
-  stageinfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-  stageinfo.module = computeDrawShader;
-  stageinfo.pName = "main";
+  ComputeEffect gradientEffect{
+      .name = "gradient",
+      .layout = _gradientPipelineLayout,
+      .data = {
+          .data1 = glm::vec4(1, 0, 0, 1),
+          .data2 = glm::vec4(0, 0, 1, 1),
+      }
+  };
+  ComputeEffect skyEffect{
+      .name = "sky",
+      .layout = _gradientPipelineLayout,
+  };
 
-  VkComputePipelineCreateInfo computePipelineCreateInfo{};
-  computePipelineCreateInfo.sType =
-      VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-  computePipelineCreateInfo.pNext = nullptr;
-  computePipelineCreateInfo.layout = _gradientPipelineLayout;
-  computePipelineCreateInfo.stage = stageinfo;
 
   VK_CHECK(vkCreateComputePipelines(_device, VK_NULL_HANDLE, 1,
-                                    &computePipelineCreateInfo, nullptr,
-                                    &_gradientPipeline));
+                                    &gradientPipelineInfo, nullptr,
+                                    &gradientEffect.pipeline));
 
-  vkDestroyShaderModule(_device, computeDrawShader, nullptr);
+  VK_CHECK(vkCreateComputePipelines(_device, VK_NULL_HANDLE, 1,
+                                    &skyPipelineInfo, nullptr,
+                                    &skyEffect.pipeline));
+
+  backgroundEffects.push_back(gradientEffect);
+  backgroundEffects.push_back(skyEffect);
+
+  vkDestroyShaderModule(_device,  gradientPipelineInfo.stage.module, nullptr);
+  vkDestroyShaderModule(_device,  skyPipelineInfo.stage.module, nullptr);
+
 
   _mainDeletionQueue.push_function([&]() {
     vkDestroyPipelineLayout(_device, _gradientPipelineLayout, nullptr);
-    vkDestroyPipeline(_device, _gradientPipeline, nullptr);
+    vkDestroyPipeline(_device, gradientEffect.pipeline, nullptr);
+    vkDestroyPipeline(_device, skyEffect.pipeline, nullptr);
   });
 }
 
@@ -503,13 +544,20 @@ void VulkanEngine::draw_background(VkCommandBuffer cmd) {
   //  &clearValue, 1, &clearRange);
   //
 
+
+  ComputeEffect& effect = backgroundEffects[currentBackgroundEffect];
   // bind the gradient drawing compute pipeline
-  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _gradientPipeline);
+  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, effect.pipeline);
 
   // bind the descriptor set containing the draw image for the compute pipeline
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
                           _gradientPipelineLayout, 0, 1, &_drawImageDescriptors,
                           0, nullptr);
+
+  vkCmdPushConstants(cmd, _gradientPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstants), &effect.data);
+  vkCmdDispatch(cmd, std::ceil(_drawExtent.width / 16.0), std::ceil(_drawExtent.height / 16.0), 1);
+
+
 
   // execute the compute pipeline dispatch. We are using 16x16 workgroup size so
   // we need to divide by it
@@ -639,8 +687,20 @@ void VulkanEngine::run() {
     ImGui_ImplSDL2_NewFrame();
     ImGui::NewFrame();
 
-    //some imgui UI to test
-    ImGui::ShowDemoWindow();
+    if(ImGui::Begin("background")){
+        ComputeEffect& selected = backgroundEffects[currentBackgroundEffect];
+		
+	ImGui::Text("Selected effect: ", selected.name);
+	
+	ImGui::SliderInt("Effect Index", &currentBackgroundEffect,0, backgroundEffects.size() - 1);
+	
+	ImGui::InputFloat4("data1",(float*)& selected.data.data1);
+	ImGui::InputFloat4("data2",(float*)& selected.data.data2);
+	ImGui::InputFloat4("data3",(float*)& selected.data.data3);
+	ImGui::InputFloat4("data4",(float*)& selected.data.data4);
+    }
+    ImGui::End();
+
 
     //make imgui calculate internal draw structures
     ImGui::Render();

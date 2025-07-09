@@ -7,6 +7,20 @@
 #include <vk_types.h>
 #include <vk_descriptors.h>
 
+struct ComputePushConstants {
+  glm::vec4 data1;
+  glm::vec4 data2;
+  glm::vec4 data3;
+  glm::vec4 data4;
+};
+struct ComputeEffect {
+  const char* name;
+
+  VkPipeline pipeline;
+  VkPipelineLayout layout;
+  
+  ComputePushConstants data;
+};
 
 struct DeletionQueue
 {
@@ -36,6 +50,8 @@ struct FrameData
   VkFence _renderFence;
   DeletionQueue _deletionQueue;
 };
+
+
 
 #define SecondsInNano(x) (x * 1000000000LL)
 
@@ -81,10 +97,12 @@ public:
   VkCommandBuffer _immCommandBuffer;
   VkCommandPool _immCommandPool;
 
-  void immediate_submit(std::function<void(VkCommandBuffer cmd)>&& function);
 
   struct SDL_Window *_window{nullptr};
   static VulkanEngine &Get();
+
+  std::vector<ComputeEffect> backgroundEffects;
+  int currentBackgroundEffect{0};
 
   // initializes everything in the engine
   void init();
@@ -97,7 +115,7 @@ public:
   void draw_background(VkCommandBuffer cmd);
   void draw_imgui(VkCommandBuffer cmd, VkImageView targetImageView);
 
-
+  void immediate_submit(std::function<void(VkCommandBuffer cmd)>&& function);
 
   // run main loop
   void run();
