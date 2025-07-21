@@ -433,9 +433,33 @@ void VulkanEngine::init_descriptors() {
   };
   vkUpdateDescriptorSets(_device, 1, &drawImageWrite, 0, nullptr);
 
+  for (int i = 0; i < get_frame_overlap(); i++) {
+    // create a descriptor pool
+    std::vector<DescriptorAllocatorGrowable::PoolSizeRatio> frame_sizes = {
+        {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 3},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3},
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4},
+    };
+
+    _frames[i]._frameDescriptor = DescriptorAllocatorGrowable{};
+    _frames[i]._frameDescriptor.init(_device, 1000, frame_sizes);
+
+    _mainDeletionQueue.push_function(
+        [&, i]() { _frames[i]._frameDescriptor.destroy_pools(_device); });
+  }
+  {
+    DescriptorLayoutBuilder builder;
+    builder.add_binding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+    _gpuSenceDataDescriptorLayout = builder.build(
+        _device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+  }
+
   _mainDeletionQueue.push_function([=, this]() {
     _globalDescriptorAllocator.destroy_pool(_device);
     vkDestroyDescriptorSetLayout(_device, _drawImageDescriptorLayout, nullptr);
+    vkDestroyDescriptorSetLayout(_device, _gpuSenceDataDescriptorLayout,
+                                 nullptr);
   });
 }
 
@@ -523,7 +547,7 @@ void VulkanEngine::create_swapchain(uint32_t width, uint32_t height) {
           .set_desired_format(VkSurfaceFormatKHR{
               .format = _swapchainImageFormat,
               .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR})
-          .set_desired_present_mode(VK_PRESENT_MODE_MAILBOX_KHR)
+          .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
           .set_desired_extent(width, height)
           .add_image_usage_flags(VK_IMAGE_USAGE_TRANSFER_DST_BIT)
           .set_desired_min_image_count(minImageCount)
@@ -729,6 +753,31 @@ void VulkanEngine::draw_background(VkCommandBuffer cmd) {
 }
 
 void VulkanEngine::draw_geometry(VkCommandBuffer cmd) {
+  // allocate a new uniform buffer for the scene data
+  AllocatedBuffer gpuSceneDataBuffer =
+      create_buffer(sizeof(GPUSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                    VMA_MEMORY_USAGE_CPU_TO_GPU);
+
+  // add it to the deletion queue of this frame so it gets deleted once its been
+  // used
+  get_current_frame()._deletionQueue.push_function(
+      [=, this]() { destroy_buffer(gpuSceneDataBuffer); });
+
+  // write the buffer
+  GPUSceneData *sceneUniformData =
+      (GPUSceneData *)gpuSceneDataBuffer.allocation->GetMappedData();
+  *sceneUniformData = sceneData;
+
+  // create a descriptor set that binds that buffer and update it
+  VkDescriptorSet globalDescriptor =
+      get_current_frame()._frameDescriptor.allocate(
+          _device, _gpuSenceDataDescriptorLayout);
+
+  DescriptorWriter writer;
+  writer.write_buffer(0, gpuSceneDataBuffer.buffer, sizeof(GPUSceneData), 0,
+                      VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+  writer.update_set(_device, globalDescriptor);
+
   VkRenderingAttachmentInfo colorAttachment = vkinit::attachment_info(
       _drawImage.imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
   VkRenderingAttachmentInfo depthAttachment = vkinit::depth_attachment_info(
@@ -780,6 +829,9 @@ void VulkanEngine::draw_geometry(VkCommandBuffer cmd) {
 }
 
 void VulkanEngine::draw() {
+  get_current_frame()._deletionQueue.flush();
+  get_current_frame()._frameDescriptor.clear_pools(_device);
+
   VK_CHECK(vkWaitForFences(_device, 1, &get_current_frame()._renderFence, true,
                            SecondsInNano(100)));
   VK_CHECK(vkResetFences(_device, 1, &get_current_frame()._renderFence));
@@ -823,6 +875,7 @@ void VulkanEngine::draw() {
   //  always +1 % totalImageSize. so we change windows presentMode to MAILBOX.
 
   get_current_frame()._deletionQueue.flush();
+  get_current_frame()._frameDescriptor.clear_pools(_device);
 
   VkCommandBuffer cmd = get_current_frame()._mainCommandBuffer;
   VK_CHECK(vkResetCommandBuffer(cmd, 0));

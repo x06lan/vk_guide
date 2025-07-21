@@ -39,6 +39,15 @@ struct FrameData {
   VkSemaphore _swapchainSemaphore, _renderSemaphore;
   VkFence _renderFence;
   DeletionQueue _deletionQueue;
+  DescriptorAllocatorGrowable _frameDescriptor;
+};
+struct GPUSceneData {
+  glm::mat4 view;
+  glm::mat4 proj;
+  glm::mat4 viewProj;
+  glm::vec4 ambientColor;
+  glm::vec4 sunlightDirection;
+  glm::vec4 sunlightColor;
 };
 
 #define SecondsInNano(x) (x * 1000000000LL)
@@ -92,6 +101,10 @@ public:
   VkPipelineLayout _meshPipelineLayout;
   GPUMeshBuffer rectangle;
   VkDescriptorPool imguiPool;
+
+  GPUSceneData sceneData;
+  VkDescriptorSetLayout _gpuSenceDataDescriptorLayout;
+
 
   bool resize_requested = false;
 
