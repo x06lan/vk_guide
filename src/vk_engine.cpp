@@ -366,7 +366,7 @@ void VulkanEngine::init_default_data() {
       create_image((void *)&black, VkExtent3D{1, 1, 1},
                    VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 
-  uint32_t magenta = glm::packUnorm4x8(glm::vec4(0, 0, 0, 1));
+  uint32_t magenta = glm::packUnorm4x8(glm::vec4(1, 0, 1, 1));
   std::array<uint32_t, 16 * 16> pixels;
 
   for (int i = 0; i < 16; i++) {
@@ -963,7 +963,7 @@ void VulkanEngine::draw_geometry(VkCommandBuffer cmd) {
   VkDescriptorSet imageSet = get_current_frame()._frameDescriptor.allocate(_device, _singleImageDescriptorLayout);
   {
       DescriptorWriter writer;
-      writer.write_image(0, _whiteImage.imageView, _defaultSamplerNearest, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+      writer.write_image(0, _errorCheckImage.imageView, _defaultSamplerNearest, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 
       writer.update_set(_device, imageSet);
   }
@@ -981,8 +981,6 @@ void VulkanEngine::draw_geometry(VkCommandBuffer cmd) {
 }
 
 void VulkanEngine::draw() {
-  get_current_frame()._deletionQueue.flush();
-  get_current_frame()._frameDescriptor.clear_pools(_device);
 
   VK_CHECK(vkWaitForFences(_device, 1, &get_current_frame()._renderFence, true,
                            SecondsInNano(100)));
