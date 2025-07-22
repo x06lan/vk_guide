@@ -105,10 +105,21 @@ public:
   GPUSceneData sceneData;
   VkDescriptorSetLayout _gpuSenceDataDescriptorLayout;
 
+  VkDescriptorSetLayout _singleImageDescriptorLayout;
+
 
   bool resize_requested = false;
 
   std::vector<std::shared_ptr<MeshAsset>> testMeshes;
+
+  AllocatedImage _whiteImage;
+  AllocatedImage _blackImage;
+  AllocatedImage _greyImage;
+  AllocatedImage _errorCheckImage;
+
+  VkSampler _defaultSamplerLinear;
+  VkSampler _defaultSamplerNearest;
+
 
   struct SDL_Window *_window{nullptr};
 
@@ -116,6 +127,12 @@ public:
 
   GPUMeshBuffer uploadMesh(std::span<uint32_t> indices,
                            std::span<Vertex> vertices);
+
+  AllocatedImage create_image(VkExtent3D size, VkFormat format , VkImageUsageFlags usage, bool mipmapped = false);
+  AllocatedImage create_image(void *data,VkExtent3D size, VkFormat format , VkImageUsageFlags usage, bool mipmapped = false);
+
+  void destroy_image(const AllocatedImage &img);
+
   void immediate_submit(std::function<void(VkCommandBuffer cmd)> &&function);
   // initializes everything in the engine
   void init();
