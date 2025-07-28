@@ -22,7 +22,6 @@ find_program(GLSL_VALIDATOR glslangValidator HINTS /usr/bin /usr/local/bin /opt/
 
 
 file(GLOB_RECURSE GLSL_SOURCE_FILES
-    "${PROJECT_SOURCE_DIR}/shaders/*.glsl"
     "${PROJECT_SOURCE_DIR}/shaders/*.frag"
     "${PROJECT_SOURCE_DIR}/shaders/*.vert"
     "${PROJECT_SOURCE_DIR}/shaders/*.comp"

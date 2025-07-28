@@ -71,4 +71,41 @@ struct GPUDrawPushConstants {
   VkDeviceAddress vertexBuffer;
 };
 
+enum class MaterialPass :uint8_t {
+    MainColor,
+    Transparent,
+    Other
+};
+struct MaterialPipeline {
+	VkPipeline pipeline;
+	VkPipelineLayout layout;
+};
+
+struct MaterialInstance {
+    MaterialPipeline* pipeline;
+    VkDescriptorSet materialSet;
+    MaterialPass passType;
+};
+
+struct RenderObject {
+    uint32_t indexCount;
+    uint32_t firstIndex;
+    VkBuffer indexBuffer;
+    
+    MaterialInstance* material;
+
+    glm::mat4 transform;
+    VkDeviceAddress vertexBufferAddress;
+};
+
+struct DrawContext {
+};
+
+// base class for a renderable dynamic object
+class IRenderable {
+
+    virtual void Draw(const glm::mat4& topMatrix, DrawContext& ctx) = 0;
+};
+
+
 

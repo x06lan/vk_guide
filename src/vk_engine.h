@@ -50,6 +50,39 @@ struct GPUSceneData {
   glm::vec4 sunlightColor;
 };
 
+struct GLTFMetallic_Roughness {
+  MaterialPipeline opaquePipeline;
+  MaterialPipeline transparentPipeline;
+
+  VkDescriptorSetLayout materialLayout;
+
+  struct MaterialConstants {
+    glm::vec4 colorFactors;
+    glm::vec4 metal_rough_factors;
+
+    // Padding
+    glm::vec4 extra[14];
+  };
+  struct MaterialResources {
+    AllocatedImage colorImage;
+    VkSampler colorSampler;
+    AllocatedImage metalRoughImage;
+    VkSampler metalRoughSampler;
+    VkBuffer dataBuffer;
+    uint32_t dataBufferOffset;
+  };
+
+  DescriptorWriter writer;
+
+  void build_pipelines(VulkanEngine *engine);
+  void clear_resources(VkDevice device);
+
+  MaterialInstance
+  write_material(VkDevice device, MaterialPass pass,
+                 const MaterialResources &resources,
+                 DescriptorAllocatorGrowable &descriptorAllocator);
+};
+
 #define SecondsInNano(x) (x * 1000000000LL)
 
 class VulkanEngine {
@@ -85,7 +118,7 @@ public:
   AllocatedImage _depthImage;
   VkExtent2D _drawExtent;
   float rendrScale = 1.0f;
-  DescriptorAllocator _globalDescriptorAllocator;
+  DescriptorAllocatorGrowable _globalDescriptorAllocator;
 
   VkFence _immFence;
   VkCommandBuffer _immCommandBuffer;
@@ -103,10 +136,9 @@ public:
   VkDescriptorPool imguiPool;
 
   GPUSceneData sceneData;
-  VkDescriptorSetLayout _gpuSenceDataDescriptorLayout;
+  VkDescriptorSetLayout _gpuSceneDataDescriptorLayout;
 
   VkDescriptorSetLayout _singleImageDescriptorLayout;
-
 
   bool resize_requested = false;
 
@@ -120,6 +152,8 @@ public:
   VkSampler _defaultSamplerLinear;
   VkSampler _defaultSamplerNearest;
 
+  MaterialInstance defaultData;
+  GLTFMetallic_Roughness metalRoughMaterial;
 
   struct SDL_Window *_window{nullptr};
 
@@ -128,8 +162,10 @@ public:
   GPUMeshBuffer uploadMesh(std::span<uint32_t> indices,
                            std::span<Vertex> vertices);
 
-  AllocatedImage create_image(VkExtent3D size, VkFormat format , VkImageUsageFlags usage, bool mipmapped = false);
-  AllocatedImage create_image(void *data,VkExtent3D size, VkFormat format , VkImageUsageFlags usage, bool mipmapped = false);
+  AllocatedImage create_image(VkExtent3D size, VkFormat format,
+                              VkImageUsageFlags usage, bool mipmapped = false);
+  AllocatedImage create_image(void *data, VkExtent3D size, VkFormat format,
+                              VkImageUsageFlags usage, bool mipmapped = false);
 
   void destroy_image(const AllocatedImage &img);
 
