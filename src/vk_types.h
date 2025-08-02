@@ -99,12 +99,32 @@ struct RenderObject {
 };
 
 struct DrawContext {
+  std::vector<RenderObject> OpaqueSurfaces;
 };
 
 // base class for a renderable dynamic object
 class IRenderable {
 
     virtual void Draw(const glm::mat4& topMatrix, DrawContext& ctx) = 0;
+};
+struct Node {
+  std::weak_ptr<IRenderable> renderable;
+  std::vector<std::shared_ptr<Node>> children;
+
+  glm::mat4 localTransform;
+  glm::mat4 worldTransform;
+
+  void refreshTransform(const glm::mat4& parentTransform) {
+    worldTransform = parentTransform * localTransform;
+    for(auto & c:children ){
+      c->refreshTransform(worldTransform);
+    }
+  }
+  virtual void Draw(const glm::mat4& topMatrix, DrawContext& ctx) {
+      for(auto & c:children ){
+        c->Draw(worldTransform, ctx);
+      }
+  }
 };
 
 

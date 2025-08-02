@@ -82,6 +82,12 @@ struct GLTFMetallic_Roughness {
                  const MaterialResources &resources,
                  DescriptorAllocatorGrowable &descriptorAllocator);
 };
+struct MeshNode : public Node {
+
+  std::shared_ptr<MeshAsset> mesh;
+
+  virtual void Draw(const glm::mat4 &topMatrix, DrawContext &ctx) override;
+};
 
 #define SecondsInNano(x) (x * 1000000000LL)
 
@@ -130,9 +136,6 @@ public:
   VkPipeline _gradientPipeline;
   VkPipelineLayout _gradientPipelineLayout;
 
-  VkPipeline _meshPipeline;
-  VkPipelineLayout _meshPipelineLayout;
-  GPUMeshBuffer rectangle;
   VkDescriptorPool imguiPool;
 
   GPUSceneData sceneData;
@@ -155,6 +158,9 @@ public:
   MaterialInstance defaultData;
   GLTFMetallic_Roughness metalRoughMaterial;
 
+  DrawContext mainDrawContext;
+  std::unordered_map<std::string, std::shared_ptr<MeshNode>> loadedNodes;
+
   struct SDL_Window *_window{nullptr};
 
   static VulkanEngine &Get();
@@ -166,6 +172,8 @@ public:
                               VkImageUsageFlags usage, bool mipmapped = false);
   AllocatedImage create_image(void *data, VkExtent3D size, VkFormat format,
                               VkImageUsageFlags usage, bool mipmapped = false);
+
+  void update_scene();
 
   void destroy_image(const AllocatedImage &img);
 
@@ -194,7 +202,6 @@ private:
   void init_commands();
   void init_sync_structures();
   void init_descriptors();
-  void init_mesh_pipeline();
   void init_background_pipeline();
   void resize_swapchain();
   void draw_background(VkCommandBuffer cmd);
